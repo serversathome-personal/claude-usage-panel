@@ -12,7 +12,7 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import { fetchUsage, readCache } from './fetcher.js';
 
 const CACHE_PATH = GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-usage.json']);
-const HOUR_SLOT_PX = 40;
+const HOUR_SLOT_PX = 60;
 const WEEK_SLOT_PX = 16;
 const BAR_HEIGHT_PX = 8;
 const POLL_SECONDS = 60;
@@ -69,6 +69,11 @@ class Indicator extends PanelMenu.Button {
     _init(extension) {
         super._init(0.0, 'Claude Usage');
         this._extension = extension;
+        this._settings = extension.getSettings();
+        this._lastWeekPct = null;
+        this._settingsChangedId = this._settings.connect(
+            'changed::week-bar-visibility',
+            () => this._applyWeekVisibility());
 
         const box = new St.BoxLayout({
             style_class: 'cu-box',
@@ -158,7 +163,8 @@ class Indicator extends PanelMenu.Button {
             this._resetLabel.text = '';
             this._fillHour.width = 0;
             this._fillWeek.width = 0;
-            this._rowWeek.visible = false;
+            this._lastWeekPct = null;
+            this._applyWeekVisibility();
             this._statusItem.label.text = data?.error
                 ? `Error: ${data.error}`
                 : 'No data — open Settings to add cookies';
@@ -186,7 +192,8 @@ class Indicator extends PanelMenu.Button {
         };
         setBar(this._fillHour, h.pct, HOUR_SLOT_PX);
         setBar(this._fillWeek, w.pct, WEEK_SLOT_PX);
-        this._rowWeek.visible = (w.pct ?? 0) >= 50;
+        this._lastWeekPct = w.pct ?? null;
+        this._applyWeekVisibility();
 
         this._fiveHourItem.label.text =
             `5-hour: ${fmtPct(h.pct)} · resets ${fmtCountdown(h.resets_at)}`;
@@ -236,6 +243,23 @@ class Indicator extends PanelMenu.Button {
             Math.floor(Date.now() / 1000) - (data.fetched_at ?? 0));
         const ageStr = ageSec < 90 ? 'just now' : `${Math.floor(ageSec / 60)}m ago`;
         this._statusItem.label.text = `Updated ${ageStr}`;
+    }
+
+    _applyWeekVisibility() {
+        const mode = this._settings.get_string('week-bar-visibility');
+        let visible;
+        if (mode === 'show') visible = true;
+        else if (mode === 'hide') visible = false;
+        else visible = (this._lastWeekPct ?? 0) >= 50;
+        this._rowWeek.visible = visible;
+    }
+
+    destroy() {
+        if (this._settingsChangedId) {
+            this._settings.disconnect(this._settingsChangedId);
+            this._settingsChangedId = null;
+        }
+        super.destroy();
     }
 });
 

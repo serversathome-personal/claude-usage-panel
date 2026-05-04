@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.claude-usage"
+          path="/org/gnome/shell/extensions/claude-usage/">
+    <key name="week-bar-visibility" type="s">
+      <default>"auto"</default>
+      <choices>
+        <choice value="auto"/>
+        <choice value="show"/>
+        <choice value="hide"/>
+      </choices>
+      <summary>7-day usage bar visibility</summary>
+      <description>
+        When to display the secondary 7-day usage bar in the panel:
+        "auto" shows it only when 7-day usage is at or above 50%,
+        "show" always displays it, "hide" hides it permanently.
+      </description>
+    </key>
+  </schema>
+</schemalist>

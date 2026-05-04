@@ -120,6 +120,20 @@ writes happen entirely inside `gnome-shell` (no external processes).
 | `stylesheet.css` | Panel bar styling                                    |
 | `metadata.json`  | GNOME extension manifest                             |
 
+## Acknowledgments
+
+This extension was built collaboratively with [Claude Code](https://claude.com/claude-code),
+Anthropic's coding agent — pretty much every commit so far is a pair-programming
+session between [@serversathome-personal](https://github.com/serversathome-personal)
+and Claude Code. Worth knowing if you're auditing the code or considering
+contributions.
+
+### Contributors
+
+- [@serversathome-personal](https://github.com/serversathome-personal) — design,
+  direction, testing on Fedora 44 / GNOME 50
+- [Claude Code](https://claude.com/claude-code) (Anthropic) — implementation
+
 ## License
 
 GPL-2.0-or-later. See [LICENSE](LICENSE).

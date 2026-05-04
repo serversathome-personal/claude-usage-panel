@@ -7,6 +7,12 @@ import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/
 import { lookupSecret, storeSecret, fetchUsage } from './fetcher.js';
 
 const ACCOUNTS = ['sessionKey', 'cf_clearance'];
+const WEEK_VIS_VALUES = ['auto', 'show', 'hide'];
+const WEEK_VIS_LABELS = [
+    'Auto (show when 7-day usage ≥ 50%)',
+    'Always show',
+    'Never show',
+];
 
 export default class ClaudeUsagePrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -53,6 +59,28 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
         const btnRow = new Adw.ActionRow();
         btnRow.add_suffix(saveBtn);
         actionGroup.add(btnRow);
+
+        const displayGroup = new Adw.PreferencesGroup({
+            title: 'Display',
+        });
+        page.add(displayGroup);
+
+        const settings = this.getSettings();
+        const weekRow = new Adw.ComboRow({
+            title: '7-day bar',
+            subtitle: 'Controls whether the secondary bar appears in the panel.',
+        });
+        const stringList = new Gtk.StringList();
+        for (const label of WEEK_VIS_LABELS) stringList.append(label);
+        weekRow.model = stringList;
+        const initialIdx = WEEK_VIS_VALUES.indexOf(
+            settings.get_string('week-bar-visibility'));
+        weekRow.selected = initialIdx >= 0 ? initialIdx : 0;
+        weekRow.connect('notify::selected', () => {
+            const v = WEEK_VIS_VALUES[weekRow.selected];
+            if (v) settings.set_string('week-bar-visibility', v);
+        });
+        displayGroup.add(weekRow);
 
         saveBtn.connect('clicked', async () => {
             saveBtn.sensitive = false;

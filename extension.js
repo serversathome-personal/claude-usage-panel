@@ -77,7 +77,7 @@ class Indicator extends PanelMenu.Button {
 
         const box = new St.BoxLayout({
             style_class: 'cu-box',
-            vertical: true,
+            vertical: false,
             y_align: Clutter.ActorAlign.CENTER,
         });
 

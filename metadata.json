@@ -4,6 +4,6 @@
   "description": "Shows claude.ai subscription usage in the top bar.",
   "shell-version": ["48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.claude-usage",
-  "version": 4,
+  "version": 5,
   "url": "https://github.com/serversathome-personal/claude-usage-panel"
 }

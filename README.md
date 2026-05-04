@@ -28,17 +28,33 @@ to make sure automated access fits your use case.
 
 ## Install
 
-### From a release zip
+### CLI (recommended)
 
-1. Download the latest `claude-usage@local.zip` from the
-   [Releases](../../releases) page.
-2. ```sh
-   mkdir -p ~/.local/share/gnome-shell/extensions/claude-usage@local
-   unzip claude-usage@local.zip \
-     -d ~/.local/share/gnome-shell/extensions/claude-usage@local
-   ```
-3. Log out and back in (Wayland has no extension hot-reload).
-4. Enable: `gnome-extensions enable claude-usage@local`
+Grab the latest release zip and let `gnome-extensions` install it:
+
+```sh
+curl -L -o /tmp/claude-usage@local.zip \
+  https://github.com/serversathome-personal/claude-usage-panel/releases/latest/download/claude-usage@local.zip
+gnome-extensions install --force /tmp/claude-usage@local.zip
+```
+
+Then log out and back in (Wayland has no extension hot-reload), and:
+
+```sh
+gnome-extensions enable claude-usage@local
+```
+
+### Manual unzip
+
+If you'd rather drop the files in by hand:
+
+```sh
+mkdir -p ~/.local/share/gnome-shell/extensions/claude-usage@local
+unzip claude-usage@local.zip \
+  -d ~/.local/share/gnome-shell/extensions/claude-usage@local
+```
+
+Log out, log back in, then `gnome-extensions enable claude-usage@local`.
 
 ### From source
 
@@ -47,7 +63,7 @@ git clone https://github.com/serversathome-personal/claude-usage-panel.git \
   ~/.local/share/gnome-shell/extensions/claude-usage@local
 ```
 
-Then log out, log back in, and run `gnome-extensions enable claude-usage@local`.
+Log out, log back in, then `gnome-extensions enable claude-usage@local`.
 
 ## First-time setup: cookies
 

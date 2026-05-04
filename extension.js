@@ -13,7 +13,7 @@ import { fetchUsage, readCache } from './fetcher.js';
 
 const CACHE_PATH = GLib.build_filenamev([GLib.get_user_cache_dir(), 'claude-usage.json']);
 const HOUR_SLOT_PX = 60;
-const WEEK_SLOT_PX = 16;
+const WEEK_SLOT_PX = 60;
 const BAR_HEIGHT_PX = 8;
 const POLL_SECONDS = 60;
 
@@ -77,51 +77,55 @@ class Indicator extends PanelMenu.Button {
 
         const box = new St.BoxLayout({
             style_class: 'cu-box',
+            vertical: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
 
-        this._track = new St.BoxLayout({
-            style_class: 'cu-track-group',
-            vertical: false,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-
-        const makeRow = (slotWidth) => {
-            const row = new St.BoxLayout({
+        const makeBarLine = (slotWidth) => {
+            const line = new St.BoxLayout({
+                style_class: 'cu-line',
+                vertical: false,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            const trackRow = new St.BoxLayout({
                 style_class: 'cu-track-row',
                 vertical: false,
                 width: slotWidth,
+                y_align: Clutter.ActorAlign.CENTER,
             });
             const fill = new St.Widget({ style_class: 'cu-fill' });
             fill.width = 0;
             fill.height = BAR_HEIGHT_PX;
-            row.add_child(fill);
-            return { row, fill };
+            trackRow.add_child(fill);
+            const pct = new St.Label({
+                text: '—',
+                style_class: 'cu-label',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            const reset = new St.Label({
+                text: '',
+                style_class: 'cu-label-secondary',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            line.add_child(trackRow);
+            line.add_child(pct);
+            line.add_child(reset);
+            return { line, fill, pct, reset };
         };
 
-        const hourRow = makeRow(HOUR_SLOT_PX);
-        const weekRow = makeRow(WEEK_SLOT_PX);
-        this._fillHour = hourRow.fill;
-        this._fillWeek = weekRow.fill;
-        this._rowWeek = weekRow.row;
-        this._rowWeek.visible = false;
-        this._track.add_child(hourRow.row);
-        this._track.add_child(weekRow.row);
+        const hour = makeBarLine(HOUR_SLOT_PX);
+        const week = makeBarLine(WEEK_SLOT_PX);
+        this._fillHour = hour.fill;
+        this._fillWeek = week.fill;
+        this._hourPctLabel = hour.pct;
+        this._hourResetLabel = hour.reset;
+        this._weekPctLabel = week.pct;
+        this._weekResetLabel = week.reset;
+        this._weekLine = week.line;
+        this._weekLine.visible = false;
 
-        this._pctLabel = new St.Label({
-            text: '—',
-            style_class: 'cu-label',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._resetLabel = new St.Label({
-            text: '',
-            style_class: 'cu-label-secondary',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-
-        box.add_child(this._track);
-        box.add_child(this._pctLabel);
-        box.add_child(this._resetLabel);
+        box.add_child(hour.line);
+        box.add_child(week.line);
         this.add_child(box);
 
         this._fiveHourItem = new PopupMenu.PopupMenuItem('5-hour: —', { reactive: false });
@@ -159,8 +163,10 @@ class Indicator extends PanelMenu.Button {
 
     setData(data) {
         if (!data || data.error) {
-            this._pctLabel.text = '!';
-            this._resetLabel.text = '';
+            this._hourPctLabel.text = '!';
+            this._hourResetLabel.text = '';
+            this._weekPctLabel.text = '';
+            this._weekResetLabel.text = '';
             this._fillHour.width = 0;
             this._fillWeek.width = 0;
             this._lastWeekPct = null;
@@ -179,10 +185,13 @@ class Indicator extends PanelMenu.Button {
         const w = data.seven_day || {};
         const ex = data.extra_usage || {};
 
-        const hPct = h.pct ?? null;
-        this._pctLabel.text = fmtPct(hPct);
-        this._resetLabel.text = h.resets_at
+        this._hourPctLabel.text = fmtPct(h.pct);
+        this._hourResetLabel.text = h.resets_at
             ? `· ${fmtCountdown(h.resets_at)}`
+            : '';
+        this._weekPctLabel.text = fmtPct(w.pct);
+        this._weekResetLabel.text = w.resets_at
+            ? `· ${fmtCountdown(w.resets_at)}`
             : '';
 
         const setBar = (fill, pctVal, slotWidth) => {
@@ -251,7 +260,7 @@ class Indicator extends PanelMenu.Button {
         if (mode === 'show') visible = true;
         else if (mode === 'hide') visible = false;
         else visible = (this._lastWeekPct ?? 0) >= 50;
-        this._rowWeek.visible = visible;
+        this._weekLine.visible = visible;
     }
 
     destroy() {

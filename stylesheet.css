@@ -1,10 +1,10 @@
 .cu-box {
-    spacing: 6px;
+    spacing: 2px;
     padding: 0 4px;
 }
 
-.cu-track-group {
-    spacing: 4px;
+.cu-line {
+    spacing: 6px;
 }
 
 .cu-track-row {

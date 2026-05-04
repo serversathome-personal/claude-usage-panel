@@ -8,11 +8,7 @@ import { lookupSecret, storeSecret, fetchUsage } from './fetcher.js';
 
 const ACCOUNTS = ['sessionKey', 'cf_clearance'];
 const WEEK_VIS_VALUES = ['auto', 'show', 'hide'];
-const WEEK_VIS_LABELS = [
-    'Auto (show when 7-day usage ≥ 50%)',
-    'Always show',
-    'Never show',
-];
+const WEEK_VIS_LABELS = ['Auto', 'Always show', 'Never show'];
 
 export default class ClaudeUsagePrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -68,7 +64,7 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
         const settings = this.getSettings();
         const weekRow = new Adw.ComboRow({
             title: '7-day bar',
-            subtitle: 'Controls whether the secondary bar appears in the panel.',
+            subtitle: 'Auto shows the bar when 7-day usage is at or above 50%.',
         });
         const stringList = new Gtk.StringList();
         for (const label of WEEK_VIS_LABELS) stringList.append(label);

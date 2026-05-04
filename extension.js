@@ -195,8 +195,11 @@ class Indicator extends PanelMenu.Button {
 
         if (ex && ex.is_enabled && ex.used_credits != null) {
             const cur = ex.currency === 'USD' ? '$' : (ex.currency || '');
+            const used = ex.used_credits.toFixed(2);
+            const limit = ex.monthly_limit != null
+                ? ex.monthly_limit.toFixed(2) : '?';
             this._extraItem.label.text =
-                `Extra usage: ${cur}${ex.used_credits} of ${cur}${ex.monthly_limit} (${fmtPct(ex.pct)})`;
+                `Extra usage: ${cur}${used} of ${cur}${limit} (${fmtPct(ex.pct)})`;
         } else {
             this._extraItem.label.text = 'Extra usage: disabled';
         }

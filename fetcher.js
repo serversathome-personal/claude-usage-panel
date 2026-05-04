@@ -167,10 +167,20 @@ export async function fetchUsage() {
     let extra_norm = null;
     const ex = raw.extra_usage;
     if (ex && typeof ex === 'object') {
+        // API returns money in cents and caps utilization at 100% even when
+        // actual spend is past the limit. Convert to dollars and recompute
+        // the true percentage from used / limit.
+        const usedDollars = typeof ex.used_credits === 'number'
+            ? ex.used_credits / 100 : null;
+        const limitDollars = typeof ex.monthly_limit === 'number'
+            ? ex.monthly_limit / 100 : null;
+        const truePct = (usedDollars != null && limitDollars && limitDollars > 0)
+            ? (usedDollars / limitDollars) * 100
+            : ex.utilization;
         extra_norm = {
-            pct: ex.utilization,
-            used_credits: ex.used_credits,
-            monthly_limit: ex.monthly_limit,
+            pct: truePct,
+            used_credits: usedDollars,
+            monthly_limit: limitDollars,
             currency: ex.currency,
             is_enabled: ex.is_enabled,
         };

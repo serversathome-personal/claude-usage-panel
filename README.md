@@ -88,7 +88,9 @@ The cookies are stored in your GNOME keyring under
 The most common cause is that `cf_clearance` has rotated. Re-paste it via
 **Settings…** and the panel will refresh. If the error message shown in
 the menu mentions HTTP 401 instead, your `sessionKey` has expired —
-log into claude.ai in your browser again and re-copy both cookies.
+log into claude.ai in your browser again and re-copy both cookies. An
+HTTP 429 means claude.ai is rate limiting the requests; no action is
+needed, the panel retries on the next poll.
 
 ## What the panel shows
 

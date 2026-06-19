@@ -153,6 +153,10 @@ export async function fetchUsage() {
         let msg = e.message || String(e);
         if (e.code === 403)
             msg = 'http 403 (cf_clearance likely expired; re-paste via Settings)';
+        else if (e.code === 401)
+            msg = 'http 401 (sessionKey expired; re-login to claude.ai and re-copy cookies)';
+        else if (e.code === 429)
+            msg = 'http 429 (rate limited; will retry on next poll)';
         const payload = { fetched_at, error: msg };
         writeCache(payload);
         return payload;

@@ -138,13 +138,29 @@ export async function fetchUsage() {
 
     const cookieHeader = `sessionKey=${sessionKey}; cf_clearance=${cf_clearance}`;
 
+    // lastActiveOrg is optional and only matters for accounts that belong to
+    // more than one organization. Looked up best-effort; absence is normal and
+    // must not block a fetch, so any error here is swallowed.
+    let lastActiveOrg = '';
+    try {
+        lastActiveOrg = (await lookupSecret('lastActiveOrg')).trim();
+    } catch (_) {
+        lastActiveOrg = '';
+    }
+
     let raw, org_id;
     try {
         const orgs = await httpJson(
             'https://claude.ai/api/organizations', cookieHeader);
         if (!Array.isArray(orgs) || orgs.length === 0)
             throw new Error('no organizations returned');
-        org_id = orgs[0].uuid || orgs[0].id;
+        // Prefer the org named by lastActiveOrg when it matches one we were
+        // given; otherwise fall back to the first org (the historical default).
+        let chosen = null;
+        if (lastActiveOrg)
+            chosen = orgs.find(o => (o.uuid || o.id) === lastActiveOrg) || null;
+        if (!chosen) chosen = orgs[0];
+        org_id = chosen.uuid || chosen.id;
         if (!org_id) throw new Error('no org id in organizations response');
         raw = await httpJson(
             `https://claude.ai/api/organizations/${org_id}/usage`,
@@ -153,6 +169,10 @@ export async function fetchUsage() {
         let msg = e.message || String(e);
         if (e.code === 403)
             msg = 'http 403 (cf_clearance likely expired; re-paste via Settings)';
+        else if (e.code === 401)
+            msg = 'http 401 (sessionKey expired; re-login to claude.ai and re-copy cookies)';
+        else if (e.code === 429)
+            msg = 'http 429 (rate limited; will retry on next poll)';
         const payload = { fetched_at, error: msg };
         writeCache(payload);
         return payload;
@@ -186,6 +206,13 @@ export async function fetchUsage() {
         };
     }
 
+    // Assumption: every `seven_day_<x>` key is a per-model breakdown, and the
+    // `<x>` suffix is a model codename. extension.js maps known codenames via
+    // KNOWN_MODELS and collapses the rest under "Other". This may mislabel
+    // future product-level keys (e.g. a hypothetical seven_day_cowork or
+    // seven_day_claude_code would land under "Other"). KNOWN_MODELS stays the
+    // single source of truth for naming; we deliberately do not maintain a
+    // denylist of keys we cannot verify.
     const models = {};
     for (const [k, v] of Object.entries(raw)) {
         if (k.startsWith('seven_day_') && v && typeof v === 'object') {
@@ -196,6 +223,10 @@ export async function fetchUsage() {
         }
     }
 
+    // Note: the parsed `raw` response is intentionally NOT included here.
+    // setData() in extension.js only reads the normalized fields below, and
+    // persisting the full API response to ~/.cache/claude-usage.json bloats
+    // the file with data nothing reads.
     const payload = {
         fetched_at,
         org_id,
@@ -203,7 +234,6 @@ export async function fetchUsage() {
         seven_day: pickWindow(raw, 'seven_day'),
         extra_usage: extra_norm,
         models,
-        raw,
     };
     writeCache(payload);
     return payload;

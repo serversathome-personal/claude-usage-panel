@@ -21,12 +21,10 @@
 }
 
 .cu-label {
-    font-feature-settings: "tnum";
     font-weight: bold;
 }
 
 .cu-label-secondary {
-    font-feature-settings: "tnum";
     opacity: 0.7;
     font-size: 0.9em;
 }

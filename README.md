@@ -83,12 +83,26 @@ claude.ai cookies stored in your GNOME keyring.
 The cookies are stored in your GNOME keyring under
 `service=claude-usage`, never written to disk in plaintext.
 
+### Optional: multiple organizations
+
+`sessionKey` and `cf_clearance` are the only required cookies. If your
+claude.ai account belongs to more than one organization, the panel
+otherwise reports on whichever org the API returns first. To pin it to a
+specific org, also copy the optional `lastActiveOrg` cookie (its value is
+an organization UUID) and paste it into the separate **lastActiveOrg
+(optional)** field in **Settings…**. When that value matches one of your
+organizations, the panel reports on that org; otherwise it falls back to
+the first one. Leave the field blank if you only have a single
+organization.
+
 ### When the panel shows `!`
 
 The most common cause is that `cf_clearance` has rotated. Re-paste it via
 **Settings…** and the panel will refresh. If the error message shown in
 the menu mentions HTTP 401 instead, your `sessionKey` has expired —
-log into claude.ai in your browser again and re-copy both cookies.
+log into claude.ai in your browser again and re-copy both cookies. An
+HTTP 429 means claude.ai is rate limiting the requests; no action is
+needed, the panel retries on the next poll.
 
 ## What the panel shows
 

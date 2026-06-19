@@ -196,6 +196,10 @@ export async function fetchUsage() {
         }
     }
 
+    // Note: the parsed `raw` response is intentionally NOT included here.
+    // setData() in extension.js only reads the normalized fields below, and
+    // persisting the full API response to ~/.cache/claude-usage.json bloats
+    // the file with data nothing reads.
     const payload = {
         fetched_at,
         org_id,
@@ -203,7 +207,6 @@ export async function fetchUsage() {
         seven_day: pickWindow(raw, 'seven_day'),
         extra_usage: extra_norm,
         models,
-        raw,
     };
     writeCache(payload);
     return payload;

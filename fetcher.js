@@ -206,6 +206,13 @@ export async function fetchUsage() {
         };
     }
 
+    // Assumption: every `seven_day_<x>` key is a per-model breakdown, and the
+    // `<x>` suffix is a model codename. extension.js maps known codenames via
+    // KNOWN_MODELS and collapses the rest under "Other". This may mislabel
+    // future product-level keys (e.g. a hypothetical seven_day_cowork or
+    // seven_day_claude_code would land under "Other"). KNOWN_MODELS stays the
+    // single source of truth for naming; we deliberately do not maintain a
+    // denylist of keys we cannot verify.
     const models = {};
     for (const [k, v] of Object.entries(raw)) {
         if (k.startsWith('seven_day_') && v && typeof v === 'object') {

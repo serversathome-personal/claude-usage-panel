@@ -77,19 +77,19 @@ class Indicator extends PanelMenu.Button {
 
         const box = new St.BoxLayout({
             style_class: 'cu-box',
-            vertical: false,
+            orientation: Clutter.Orientation.HORIZONTAL,
             y_align: Clutter.ActorAlign.CENTER,
         });
 
         const makeBarLine = (slotWidth) => {
             const line = new St.BoxLayout({
                 style_class: 'cu-line',
-                vertical: false,
+                orientation: Clutter.Orientation.HORIZONTAL,
                 y_align: Clutter.ActorAlign.CENTER,
             });
             const trackRow = new St.BoxLayout({
                 style_class: 'cu-track-row',
-                vertical: false,
+                orientation: Clutter.Orientation.HORIZONTAL,
                 width: slotWidth,
                 y_align: Clutter.ActorAlign.CENTER,
             });

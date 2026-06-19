@@ -7,6 +7,8 @@ import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/
 import { lookupSecret, storeSecret, fetchUsage } from './fetcher.js';
 
 const ACCOUNTS = ['sessionKey', 'cf_clearance'];
+// Optional: only needed for accounts in more than one organization.
+const OPTIONAL_ACCOUNT = 'lastActiveOrg';
 const WEEK_VIS_VALUES = ['auto', 'show', 'hide'];
 const WEEK_VIS_LABELS = ['Auto', 'Always show', 'Never show'];
 
@@ -36,6 +38,28 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
                 .then(v => { row.text = (v || '').trim(); })
                 .catch(e => logError(e, `claude-usage prefs: lookup ${account}`));
         }
+
+        // Optional org selector. Leave blank unless your account belongs to
+        // more than one organization; when set, the fetcher uses the matching
+        // org instead of the first one returned by the API.
+        const optionalGroup = new Adw.PreferencesGroup({
+            title: 'Multiple organizations (optional)',
+            description:
+                'Only needed if your claude.ai account belongs to more than ' +
+                'one organization. Paste the lastActiveOrg cookie to pick which ' +
+                'org the panel reports on. Leave blank otherwise.',
+        });
+        page.add(optionalGroup);
+
+        const optionalRow = new Adw.PasswordEntryRow({
+            title: `${OPTIONAL_ACCOUNT} (optional)`,
+        });
+        optionalGroup.add(optionalRow);
+        rows[OPTIONAL_ACCOUNT] = optionalRow;
+        lookupSecret(OPTIONAL_ACCOUNT)
+            .then(v => { optionalRow.text = (v || '').trim(); })
+            .catch(e => logError(e,
+                `claude-usage prefs: lookup ${OPTIONAL_ACCOUNT}`));
 
         const actionGroup = new Adw.PreferencesGroup();
         page.add(actionGroup);
@@ -88,6 +112,11 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
                     if (!v) throw new Error(`${account} is empty`);
                     await storeSecret(account, v);
                 }
+                // Optional: store only when provided; a blank value is fine
+                // and must not block saving the required cookies.
+                const optionalVal = rows[OPTIONAL_ACCOUNT].text.trim();
+                if (optionalVal)
+                    await storeSecret(OPTIONAL_ACCOUNT, optionalVal);
                 status.title = 'Saved';
                 status.subtitle = 'Fetching…';
                 const result = await fetchUsage();

@@ -83,6 +83,18 @@ claude.ai cookies stored in your GNOME keyring.
 The cookies are stored in your GNOME keyring under
 `service=claude-usage`, never written to disk in plaintext.
 
+### Optional: multiple organizations
+
+`sessionKey` and `cf_clearance` are the only required cookies. If your
+claude.ai account belongs to more than one organization, the panel
+otherwise reports on whichever org the API returns first. To pin it to a
+specific org, also copy the optional `lastActiveOrg` cookie (its value is
+an organization UUID) and paste it into the separate **lastActiveOrg
+(optional)** field in **Settings…**. When that value matches one of your
+organizations, the panel reports on that org; otherwise it falls back to
+the first one. Leave the field blank if you only have a single
+organization.
+
 ### When the panel shows `!`
 
 The most common cause is that `cf_clearance` has rotated. Re-paste it via

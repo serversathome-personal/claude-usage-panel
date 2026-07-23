@@ -115,7 +115,7 @@ needed, the panel retries on the next poll.
 
 Click the widget for more detail: per-window breakdown, extra-credit
 balance if you have one enabled, and a per-model 7-day breakdown
-(Sonnet / Opus / Haiku, with anything else collapsed under "Other").
+(Sonnet / Opus / Haiku / Fable, with anything else collapsed under "Other").
 
 ## How it works
 

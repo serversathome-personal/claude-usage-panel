@@ -19,9 +19,10 @@ const POLL_SECONDS = 60;
 
 // Codename → display name. Anything not listed is collapsed under "Other".
 const KNOWN_MODELS = {
-    'sonnet': 'Sonnet',
-    'opus':   'Opus',
-    'haiku':  'Haiku',
+    'sonnet':   'Sonnet',
+    'opus':     'Opus',
+    'haiku':    'Haiku',
+    'omelette': 'Fable',   // claude.ai's internal codename for Fable 5
 };
 
 function fmtPct(pct) {

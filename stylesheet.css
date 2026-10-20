@@ -20,6 +20,10 @@
     background-color: #4caf50;
 }
 
+.cu-stale {
+    opacity: 0.55;
+}
+
 .cu-label {
     font-weight: bold;
 }

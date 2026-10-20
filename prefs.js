@@ -1,10 +1,13 @@
 import Adw from 'gi://Adw';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
 
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import { lookupSecret, storeSecret, fetchUsage } from './fetcher.js';
+import {
+    DEFAULT_USER_AGENT, fetchUsage, lookupSecret, storeSecret,
+} from './fetcher.js';
 
 const ACCOUNTS = ['sessionKey', 'cf_clearance'];
 // Optional: only needed for accounts in more than one organization.
@@ -61,6 +64,23 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
             .catch(e => logError(e,
                 `claude-usage prefs: lookup ${OPTIONAL_ACCOUNT}`));
 
+        const settings = this.getSettings();
+
+        const uaGroup = new Adw.PreferencesGroup({
+            title: 'Browser user agent (optional)',
+            description:
+                'Cloudflare ties cf_clearance to the browser that earned it. ' +
+                'If you get HTTP 403 right after pasting a fresh cookie, paste ' +
+                'that browser\'s user agent here (run navigator.userAgent in ' +
+                'its devtools console). Leave blank for the default.',
+        });
+        page.add(uaGroup);
+        const uaRow = new Adw.EntryRow({ title: 'User-Agent' });
+        uaRow.set_tooltip_text(`Default: ${DEFAULT_USER_AGENT}`);
+        settings.bind('user-agent', uaRow, 'text',
+            Gio.SettingsBindFlags.DEFAULT);
+        uaGroup.add(uaRow);
+
         const actionGroup = new Adw.PreferencesGroup();
         page.add(actionGroup);
 
@@ -85,10 +105,9 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
         });
         page.add(displayGroup);
 
-        const settings = this.getSettings();
         const weekRow = new Adw.ComboRow({
             title: '7-day bar',
-            subtitle: 'Auto shows the bar when 7-day usage is at or above 50%.',
+            subtitle: 'Auto shows the bar when any weekly limit is at or above 50%.',
         });
         const stringList = new Gtk.StringList();
         for (const label of WEEK_VIS_LABELS) stringList.append(label);
@@ -119,10 +138,12 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
                     await storeSecret(OPTIONAL_ACCOUNT, optionalVal);
                 status.title = 'Saved';
                 status.subtitle = 'Fetching…';
-                const result = await fetchUsage();
-                if (result?.error) {
+                const result = await fetchUsage({
+                    userAgent: settings.get_string('user-agent').trim(),
+                });
+                if (!result || result.error) {
                     status.title = 'Saved, but fetch failed';
-                    status.subtitle = result.error;
+                    status.subtitle = result?.error ?? 'cancelled';
                 } else {
                     status.title = 'Saved & refreshed';
                     status.subtitle = 'Check the panel widget.';

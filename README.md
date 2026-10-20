@@ -21,7 +21,8 @@ to make sure automated access fits your use case.
 
 ## Requirements
 
-- GNOME Shell 48, 49, or 50 (tested on Fedora 44, GNOME Shell 50.x)
+- GNOME Shell 48–51 (tested on Fedora 44, GNOME Shell 50.x; 51 is
+  declared but not yet tested)
 - `libsoup3` and `libsecret` — both ship with GNOME, no extra installs
   needed on a typical desktop
 - A claude.ai account with an active subscription
@@ -98,7 +99,10 @@ organization.
 ### When the panel shows `!`
 
 The most common cause is that `cf_clearance` has rotated. Re-paste it via
-**Settings…** and the panel will refresh. If the error message shown in
+**Settings…** and the panel will refresh. If you still get HTTP 403 with a
+freshly copied `cf_clearance`, Cloudflare probably rejected the user agent:
+paste your browser's `navigator.userAgent` (from its devtools console)
+into the **Browser user agent** field in **Settings…**. If the error message shown in
 the menu mentions HTTP 401 instead, your `sessionKey` has expired —
 log into claude.ai in your browser again and re-copy both cookies. An
 HTTP 429 means claude.ai is rate limiting the requests; no action is
@@ -108,20 +112,38 @@ needed, the panel retries on the next poll.
 
 - **Bar (left, wider):** percentage of the rolling 5-hour quota used.
   Color smoothly grades from green to yellow to red as it fills.
-- **Bar (right, narrower):** percentage of the 7-day quota — only visible
-  once you cross 50%, since most of the time it's near zero.
+- **Bar (right):** the tightest weekly limit, either the overall 7-day
+  quota or a per-model cap (labelled with the model name when it is the
+  per-model one). Only visible once it crosses 50%, since most of the time
+  it's near zero.
 - **Number:** the 5-hour percentage.
 - **Countdown:** time until the 5-hour window resets.
 
 Click the widget for more detail: per-window breakdown, extra-credit
-balance if you have one enabled, and a per-model 7-day breakdown
-(Sonnet / Opus / Haiku / Fable, with anything else collapsed under "Other").
+balance if you have one enabled, and every per-model and per-product limit
+claude.ai reports (Fable, Opus, Sonnet, Haiku, plus things like OAuth apps
+or Cowork), each with its own reset countdown. Limits that exist but
+haven't been touched this week show as "not used".
+
+If a poll fails, the panel keeps the last good numbers, dimmed and marked
+with `!`, and the menu shows the error. After an HTTP 429 the panel backs
+off (skipping 1, 2, 4… up to 16 polls) until a request succeeds.
+
+### When the per-model list looks wrong
+
+claude.ai's usage endpoint is undocumented and its keys change with new
+models. **Copy raw usage response** in the menu puts the last response
+(percentages and timestamps only, no cookies) on your clipboard. Paste it
+into an issue so the parser can be updated.
 
 ## How it works
 
 A timer in the extension fetches `/api/organizations/{org}/usage` every
 60 seconds, parses the JSON, and writes a normalized snapshot to
-`~/.cache/claude-usage.json`. The panel reads that cache. Both reads and
+`~/.cache/claude-usage.json` (the raw response goes to
+`~/.cache/claude-usage-raw.json` for debugging). The organization ID is
+looked up once and reused until a request fails; with several orgs and no
+`lastActiveOrg` set, the one with claude.ai chat access is preferred. The panel reads that cache. Both reads and
 writes happen entirely inside `gnome-shell` (no external processes).
 
 ## Files
@@ -131,6 +153,7 @@ writes happen entirely inside `gnome-shell` (no external processes).
 | `extension.js`   | Panel indicator, polling timer, menu                 |
 | `prefs.js`       | Adwaita settings dialog for cookie entry             |
 | `fetcher.js`     | HTTP via libsoup3, secrets via libsecret, cache I/O  |
+| `parse.js`       | Pure response parsing (tested with `node --test test/parse.test.mjs`) |
 | `stylesheet.css` | Panel bar styling                                    |
 | `metadata.json`  | GNOME extension manifest                             |
 

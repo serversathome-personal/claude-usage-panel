@@ -16,5 +16,15 @@
         "show" always displays it, "hide" hides it permanently.
       </description>
     </key>
+    <key name="user-agent" type="s">
+      <default>""</default>
+      <summary>User-Agent sent to claude.ai</summary>
+      <description>
+        Cloudflare ties cf_clearance to the browser that earned it. If
+        requests fail with HTTP 403 right after pasting a fresh cookie, set
+        this to that browser's navigator.userAgent. Empty uses the built-in
+        default.
+      </description>
+    </key>
   </schema>
 </schemalist>

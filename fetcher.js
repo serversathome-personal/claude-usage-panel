@@ -3,11 +3,20 @@ import Gio from 'gi://Gio';
 import Secret from 'gi://Secret';
 import Soup from 'gi://Soup?version=3.0';
 
+import { normalizeUsage, orgIdOf, pickOrg } from './parse.js';
+
 const SERVICE = 'claude-usage';
-const USER_AGENT =
+// cf_clearance is bound to the browser that earned it, so users whose browser
+// differs can override this via the user-agent setting.
+export const DEFAULT_USER_AGENT =
     'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
-const CACHE_PATH = GLib.build_filenamev(
+export const CACHE_PATH = GLib.build_filenamev(
     [GLib.get_user_cache_dir(), 'claude-usage.json']);
+// Last raw /usage response, kept separately so the menu's "Copy raw
+// response" item can show exactly what claude.ai returned when the API shape
+// changes. Holds percentages and timestamps only; cookies never touch disk.
+export const RAW_PATH = GLib.build_filenamev(
+    [GLib.get_user_cache_dir(), 'claude-usage-raw.json']);
 
 // SchemaFlags.NONE => attribute-only matching, so entries previously stored
 // by `secret-tool store service=claude-usage account=...` are findable
@@ -57,15 +66,15 @@ function session() {
     return _session;
 }
 
-function httpJson(url, cookieHeader) {
+function httpJson(url, cookieHeader, userAgent, cancellable) {
     return new Promise((resolve, reject) => {
         const msg = Soup.Message.new('GET', url);
         const h = msg.get_request_headers();
         h.append('Cookie', cookieHeader);
-        h.append('User-Agent', USER_AGENT);
+        h.append('User-Agent', userAgent || DEFAULT_USER_AGENT);
         h.append('Accept', 'application/json');
         session().send_and_read_async(
-            msg, GLib.PRIORITY_DEFAULT, null,
+            msg, GLib.PRIORITY_DEFAULT, cancellable ?? null,
             (src, res) => {
                 try {
                     const bytes = src.send_and_read_finish(res);
@@ -76,41 +85,39 @@ function httpJson(url, cookieHeader) {
                         return reject(err);
                     }
                     const text = new TextDecoder().decode(bytes.get_data());
-                    resolve(JSON.parse(text));
+                    try {
+                        resolve(JSON.parse(text));
+                    } catch (_) {
+                        // Cloudflare challenge pages come back as HTML.
+                        reject(new Error(text.trimStart().startsWith('<')
+                            ? 'got HTML instead of JSON (Cloudflare challenge? re-paste cf_clearance)'
+                            : 'response was not valid JSON'));
+                    }
                 } catch (e) { reject(e); }
             });
     });
 }
 
-function pickWindow(raw, key) {
-    const v = raw?.[key];
-    if (!v || typeof v !== 'object') return null;
-    const pct = v.utilization;
-    const resets = v.resets_at;
-    if (pct == null && resets == null) return null;
-    return { pct, resets_at: resets };
-}
-
-function writeCache(payload) {
+function writeJson(path, payload) {
     try {
-        const file = Gio.File.new_for_path(CACHE_PATH);
+        const file = Gio.File.new_for_path(path);
         const parent = file.get_parent();
         if (parent && !parent.query_exists(null))
             parent.make_directory_with_parents(null);
-        const tmp = Gio.File.new_for_path(`${CACHE_PATH}.tmp`);
+        const tmp = Gio.File.new_for_path(`${path}.tmp`);
         const stream = tmp.replace(null, false, Gio.FileCreateFlags.NONE, null);
         stream.write_all(
             new TextEncoder().encode(JSON.stringify(payload, null, 2)), null);
         stream.close(null);
         tmp.move(file, Gio.FileCopyFlags.OVERWRITE, null, null);
     } catch (e) {
-        logError(e, 'claude-usage: writeCache failed');
+        logError(e, `claude-usage: write ${path} failed`);
     }
 }
 
-export function readCache() {
+function readJson(path) {
     try {
-        const file = Gio.File.new_for_path(CACHE_PATH);
+        const file = Gio.File.new_for_path(path);
         if (!file.query_exists(null)) return null;
         const [ok, contents] = file.load_contents(null);
         if (!ok) return null;
@@ -118,7 +125,42 @@ export function readCache() {
     } catch (_) { return null; }
 }
 
-export async function fetchUsage() {
+export function readCache() {
+    return readJson(CACHE_PATH);
+}
+
+export function readRawText() {
+    const raw = readJson(RAW_PATH);
+    return raw ? JSON.stringify(raw, null, 2) : null;
+}
+
+function hasData(p) {
+    return !!(p && (p.five_hour || p.seven_day));
+}
+
+// On failure keep the last good numbers on screen, flagged as stale, rather
+// than blanking the panel over one bad poll.
+function failure(fetched_at, error, code = null) {
+    const prev = readCache();
+    const payload = hasData(prev)
+        ? { ...prev, error, error_code: code, error_at: fetched_at }
+        : { fetched_at, error, error_code: code };
+    writeJson(CACHE_PATH, payload);
+    return payload;
+}
+
+function isCancelled(e) {
+    return e instanceof GLib.Error &&
+        e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED);
+}
+
+// Org lookups are cached per (sessionKey, lastActiveOrg) so each poll costs
+// one request instead of two. Any failure on /usage drops the cache.
+let _org = { key: null, id: null };
+
+// opts: { userAgent, cancellable }. Resolves to null when cancelled.
+export async function fetchUsage(opts = {}) {
+    const { userAgent = '', cancellable = null } = opts;
     const fetched_at = Math.floor(Date.now() / 1000);
 
     let sessionKey, cf_clearance;
@@ -126,21 +168,16 @@ export async function fetchUsage() {
         sessionKey = (await lookupSecret('sessionKey')).trim();
         cf_clearance = (await lookupSecret('cf_clearance')).trim();
     } catch (e) {
-        const payload = { fetched_at, error: `auth: ${e.message || e}` };
-        writeCache(payload);
-        return payload;
+        return failure(fetched_at, `auth: ${e.message || e}`);
     }
-    if (!sessionKey || !cf_clearance) {
-        const payload = { fetched_at, error: 'missing cookies; open Settings' };
-        writeCache(payload);
-        return payload;
-    }
+    if (!sessionKey || !cf_clearance)
+        return failure(fetched_at, 'missing cookies; open Settings');
 
     const cookieHeader = `sessionKey=${sessionKey}; cf_clearance=${cf_clearance}`;
 
     // lastActiveOrg is optional and only matters for accounts that belong to
-    // more than one organization. Looked up best-effort; absence is normal and
-    // must not block a fetch, so any error here is swallowed.
+    // more than one organization. Absence is normal and must not block a
+    // fetch, so any error here is swallowed.
     let lastActiveOrg = '';
     try {
         lastActiveOrg = (await lookupSecret('lastActiveOrg')).trim();
@@ -148,93 +185,41 @@ export async function fetchUsage() {
         lastActiveOrg = '';
     }
 
+    const orgKey = `${sessionKey}\n${lastActiveOrg}`;
     let raw, org_id;
     try {
-        const orgs = await httpJson(
-            'https://claude.ai/api/organizations', cookieHeader);
-        if (!Array.isArray(orgs) || orgs.length === 0)
-            throw new Error('no organizations returned');
-        // Prefer the org named by lastActiveOrg when it matches one we were
-        // given; otherwise fall back to the first org (the historical default).
-        let chosen = null;
-        if (lastActiveOrg)
-            chosen = orgs.find(o => (o.uuid || o.id) === lastActiveOrg) || null;
-        if (!chosen) chosen = orgs[0];
-        org_id = chosen.uuid || chosen.id;
-        if (!org_id) throw new Error('no org id in organizations response');
+        if (_org.key === orgKey && _org.id) {
+            org_id = _org.id;
+        } else {
+            const orgs = await httpJson('https://claude.ai/api/organizations',
+                cookieHeader, userAgent, cancellable);
+            const chosen = pickOrg(orgs, lastActiveOrg);
+            if (!chosen) throw new Error('no organizations returned');
+            org_id = orgIdOf(chosen);
+            if (!org_id) throw new Error('no org id in organizations response');
+            _org = { key: orgKey, id: org_id };
+        }
         raw = await httpJson(
             `https://claude.ai/api/organizations/${org_id}/usage`,
-            cookieHeader);
+            cookieHeader, userAgent, cancellable);
     } catch (e) {
+        if (isCancelled(e)) return null;
+        _org = { key: null, id: null };
         let msg = e.message || String(e);
         if (e.code === 403)
-            msg = 'http 403 (cf_clearance likely expired; re-paste via Settings)';
+            msg = 'http 403 (cf_clearance expired or user agent mismatch; re-paste via Settings)';
         else if (e.code === 401)
             msg = 'http 401 (sessionKey expired; re-login to claude.ai and re-copy cookies)';
         else if (e.code === 429)
-            msg = 'http 429 (rate limited; will retry on next poll)';
-        const payload = { fetched_at, error: msg };
-        writeCache(payload);
-        return payload;
+            msg = 'http 429 (rate limited; backing off)';
+        return failure(fetched_at, msg, e.code ?? null);
     }
 
-    if (!raw || typeof raw !== 'object') {
-        const payload = { fetched_at, error: 'unexpected response' };
-        writeCache(payload);
-        return payload;
-    }
+    if (!raw || typeof raw !== 'object')
+        return failure(fetched_at, 'unexpected response');
 
-    let extra_norm = null;
-    const ex = raw.extra_usage;
-    if (ex && typeof ex === 'object') {
-        // API returns money in cents and caps utilization at 100% even when
-        // actual spend is past the limit. Convert to dollars and recompute
-        // the true percentage from used / limit.
-        const usedDollars = typeof ex.used_credits === 'number'
-            ? ex.used_credits / 100 : null;
-        const limitDollars = typeof ex.monthly_limit === 'number'
-            ? ex.monthly_limit / 100 : null;
-        const truePct = (usedDollars != null && limitDollars && limitDollars > 0)
-            ? (usedDollars / limitDollars) * 100
-            : ex.utilization;
-        extra_norm = {
-            pct: truePct,
-            used_credits: usedDollars,
-            monthly_limit: limitDollars,
-            currency: ex.currency,
-            is_enabled: ex.is_enabled,
-        };
-    }
-
-    // Assumption: every `seven_day_<x>` key is a per-model breakdown, and the
-    // `<x>` suffix is a model codename. extension.js maps known codenames via
-    // KNOWN_MODELS and collapses the rest under "Other". This may mislabel
-    // future product-level keys (e.g. a hypothetical seven_day_cowork or
-    // seven_day_claude_code would land under "Other"). KNOWN_MODELS stays the
-    // single source of truth for naming; we deliberately do not maintain a
-    // denylist of keys we cannot verify.
-    const models = {};
-    for (const [k, v] of Object.entries(raw)) {
-        if (k.startsWith('seven_day_') && v && typeof v === 'object') {
-            models[k.slice('seven_day_'.length)] = {
-                pct: v.utilization,
-                resets_at: v.resets_at,
-            };
-        }
-    }
-
-    // Note: the parsed `raw` response is intentionally NOT included here.
-    // setData() in extension.js only reads the normalized fields below, and
-    // persisting the full API response to ~/.cache/claude-usage.json bloats
-    // the file with data nothing reads.
-    const payload = {
-        fetched_at,
-        org_id,
-        five_hour: pickWindow(raw, 'five_hour'),
-        seven_day: pickWindow(raw, 'seven_day'),
-        extra_usage: extra_norm,
-        models,
-    };
-    writeCache(payload);
+    writeJson(RAW_PATH, raw);
+    const payload = { fetched_at, org_id, ...normalizeUsage(raw) };
+    writeJson(CACHE_PATH, payload);
     return payload;
 }

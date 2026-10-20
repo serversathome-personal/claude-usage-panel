@@ -1,0 +1,57 @@
+# Push a tag like v0.2.0 to build claude-usage@local.zip and publish it as a
+# GitHub release. The README's install command downloads the zip from the
+# latest release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: node --test test/parse.test.mjs
+
+      - name: Compile schemas
+        run: |
+          sudo apt-get install -y --no-install-recommends libglib2.0-bin
+          glib-compile-schemas --strict schemas/
+
+      - name: Build zip
+        run: |
+          zip -X claude-usage@local.zip \
+            metadata.json extension.js prefs.js fetcher.js parse.js \
+            stylesheet.css LICENSE README.md \
+            schemas/*.gschema.xml schemas/gschemas.compiled
+
+      # Guards against shipping a zip that is missing a module the extension
+      # imports (e.g. a new helper file not added to the list above).
+      - name: Check every local import is in the zip
+        run: |
+          listing=$(unzip -Z1 claude-usage@local.zip)
+          missing=0
+          for f in $(grep -ohE "from '\./[^']+'" *.js | sed -E "s/from '\.\/(.*)'/\1/" | sort -u); do
+            if ! grep -qxF "$f" <<<"$listing"; then
+              echo "::error::$f is imported but not in the zip"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" claude-usage@local.zip \
+            --title "$GITHUB_REF_NAME" --generate-notes

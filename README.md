@@ -157,6 +157,18 @@ writes happen entirely inside `gnome-shell` (no external processes).
 | `stylesheet.css` | Panel bar styling                                    |
 | `metadata.json`  | GNOME extension manifest                             |
 
+## Releasing
+
+Bump `version` in `metadata.json`, merge to `main`, then push a tag:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` runs the tests, builds
+`claude-usage@local.zip` and publishes it as a GitHub release, which is
+where the install command above downloads from.
+
 ## Acknowledgments
 
 This extension was built collaboratively with [Claude Code](https://claude.com/claude-code),

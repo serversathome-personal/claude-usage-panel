@@ -119,11 +119,14 @@ needed, the panel retries on the next poll.
 - **Number:** the 5-hour percentage.
 - **Countdown:** time until the 5-hour window resets.
 
-Click the widget for more detail: per-window breakdown, extra-credit
-balance if you have one enabled, and every per-model and per-product limit
-claude.ai reports (Fable, Opus, Sonnet, Haiku, plus things like OAuth apps
-or Cowork), each with its own reset countdown. Limits that exist but
-haven't been touched this week show as "not used".
+Click the widget for more detail, mirroring claude.ai/settings/usage:
+
+- the 5-hour and 7-day windows with reset countdowns
+- usage credits (amount used, or why they're off, e.g. "out of credits")
+- **Per-model limits**: separate weekly caps such as "Fable this week",
+  each with its own reset countdown
+- **This week by product**: how this week's usage splits across Claude
+  Code, chats, Cowork and so on (shares of your usage, not limits)
 
 If a poll fails, the panel keeps the last good numbers, dimmed and marked
 with `!`, and the menu shows the error. After an HTTP 429 the panel backs

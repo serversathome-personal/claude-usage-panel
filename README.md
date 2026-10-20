@@ -165,9 +165,12 @@ Bump `version` in `metadata.json`, merge to `main`, then push a tag:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-`.github/workflows/release.yml` runs the tests, builds
-`claude-usage@local.zip` and publishes it as a GitHub release, which is
-where the install command above downloads from.
+Or, on GitHub, **Releases → Draft a new release**, type a new tag such as
+`v0.2.0` targeting `main`, and publish.
+
+Either way `.github/workflows/release.yml` runs the tests, builds
+`claude-usage@local.zip` and attaches it to the release, which is where
+the install command above downloads from.
 
 ## Acknowledgments
 

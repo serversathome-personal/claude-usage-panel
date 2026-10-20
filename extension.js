@@ -43,6 +43,23 @@ function colorForPct(pct) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
+function fmtMoney(amount, currency) {
+    if (amount == null) return '?';
+    const sym = currency === 'USD' ? '$' : currency ? `${currency} ` : '';
+    return `${sym}${amount.toFixed(2)}`;
+}
+
+function fmtCredits(c) {
+    if (!c) return 'Usage credits: —';
+    if (c.enabled) {
+        return `Usage credits: ${fmtMoney(c.used, c.currency)} of ` +
+            `${fmtMoney(c.limit, c.currency)} (${fmtPct(c.pct)})`;
+    }
+    // e.g. "out_of_credits" → "out of credits"
+    const why = c.disabled_reason ? String(c.disabled_reason).replace(/_/g, ' ') : '';
+    return `Usage credits: off${why ? ` (${why})` : ''}`;
+}
+
 function hasData(data) {
     return !!(data && (data.five_hour || data.seven_day));
 }
@@ -153,13 +170,16 @@ class Indicator extends PanelMenu.Button {
 
         this._fiveHourItem = new PopupMenu.PopupMenuItem('5-hour: —', { reactive: false });
         this._sevenDayItem = new PopupMenu.PopupMenuItem('7-day: —', { reactive: false });
-        this._extraItem    = new PopupMenu.PopupMenuItem('Extra usage: —', { reactive: false });
+        this._extraItem    = new PopupMenu.PopupMenuItem('Usage credits: —', { reactive: false });
         this.menu.addMenuItem(this._fiveHourItem);
         this.menu.addMenuItem(this._sevenDayItem);
         this.menu.addMenuItem(this._extraItem);
 
         this._modelsSubMenu = new PopupMenu.PopupSubMenuMenuItem('Per-model limits');
         this.menu.addMenuItem(this._modelsSubMenu);
+
+        this._breakdownSubMenu = new PopupMenu.PopupSubMenuMenuItem('This week by product');
+        this.menu.addMenuItem(this._breakdownSubMenu);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -215,15 +235,15 @@ class Indicator extends PanelMenu.Button {
                 : 'No data — open Settings to add cookies';
             this._fiveHourItem.label.text = '5-hour: —';
             this._sevenDayItem.label.text = '7-day: —';
-            this._extraItem.label.text = 'Extra usage: —';
+            this._extraItem.label.text = 'Usage credits: —';
             this._modelsSubMenu.label.text = 'Per-model limits';
             this._modelsSubMenu.menu.removeAll();
+            this._breakdownSubMenu.visible = false;
             return;
         }
 
         const h = data.five_hour || {};
         const w = data.seven_day || {};
-        const ex = data.extra_usage || {};
 
         // A failed poll keeps the last good numbers but dims them.
         if (data.error) this._box.add_style_class_name('cu-stale');
@@ -253,18 +273,10 @@ class Indicator extends PanelMenu.Button {
         this._fiveHourItem.label.text = fmtWindowLine('5-hour', h);
         this._sevenDayItem.label.text = fmtWindowLine('7-day', w);
 
-        if (ex && ex.is_enabled && ex.used_credits != null) {
-            const cur = ex.currency === 'USD' ? '$' : (ex.currency || '');
-            const used = ex.used_credits.toFixed(2);
-            const limit = ex.monthly_limit != null
-                ? ex.monthly_limit.toFixed(2) : '?';
-            this._extraItem.label.text =
-                `Extra usage: ${cur}${used} of ${cur}${limit} (${fmtPct(ex.pct)})`;
-        } else {
-            this._extraItem.label.text = 'Extra usage: disabled';
-        }
+        this._extraItem.label.text = fmtCredits(data.credits);
 
         this._renderLimits(data.limits || []);
+        this._renderBreakdown(data.breakdown || []);
 
         const now = Math.floor(Date.now() / 1000);
         const ageStr = fmtAge(Math.max(0, now - (data.fetched_at ?? 0)));
@@ -279,7 +291,7 @@ class Indicator extends PanelMenu.Button {
 
         const line = l => {
             const name = `${l.name}${l.window === '5h' ? ' (5-hour)' : ''}`;
-            if (l.unused) return `${name}: not used`;
+            if (l.pct == null) return `${name}: —`;
             const reset = fmtCountdown(l.resets_at);
             return `${name}: ${fmtPct(l.pct)}${reset ? ` · resets ${reset}` : ''}`;
         };
@@ -291,14 +303,13 @@ class Indicator extends PanelMenu.Button {
         const models = limits.filter(l => l.kind === 'model').sort(byPct);
         const other = limits.filter(l => l.kind !== 'model').sort(byPct);
 
-        const top = models.find(l => !l.unused);
+        const top = models.find(l => l.pct != null);
         sub.label.text = top
             ? `Per-model limits · ${top.name} ${fmtPct(top.pct)}`
             : 'Per-model limits';
 
         if (limits.length === 0) {
-            add('None reported by claude.ai');
-            add('(use "Copy raw usage response" to inspect)');
+            add('No separate model limits right now');
             return;
         }
         for (const l of models) add(line(l));
@@ -306,6 +317,18 @@ class Indicator extends PanelMenu.Button {
             if (models.length > 0)
                 sub.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             for (const l of other) add(line(l));
+        }
+    }
+
+    // Share of this week's usage per product; percentages of the week's
+    // usage, not of a limit.
+    _renderBreakdown(rows) {
+        const sub = this._breakdownSubMenu;
+        sub.menu.removeAll();
+        sub.visible = rows.length > 0;
+        for (const r of rows) {
+            sub.menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                `${r.name}: ${fmtPct(r.pct)}`, { reactive: false }));
         }
     }
 

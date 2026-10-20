@@ -12,7 +12,21 @@
       <summary>7-day usage bar visibility</summary>
       <description>
         When to display the secondary 7-day usage bar in the panel:
-        "auto" shows it only when 7-day usage is at or above 50%,
+        "auto" shows it only when overall 7-day usage is at or above 50%,
+        "show" always displays it, "hide" hides it permanently.
+      </description>
+    </key>
+    <key name="model-bar-visibility" type="s">
+      <default>"auto"</default>
+      <choices>
+        <choice value="auto"/>
+        <choice value="show"/>
+        <choice value="hide"/>
+      </choices>
+      <summary>Per-model weekly bar visibility</summary>
+      <description>
+        When to display a bar for each separate per-model weekly cap (such as
+        Fable): "auto" shows it only when that cap is at or above 50%,
         "show" always displays it, "hide" hides it permanently.
       </description>
     </key>

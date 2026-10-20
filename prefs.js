@@ -107,7 +107,7 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
 
         const weekRow = new Adw.ComboRow({
             title: '7-day bar',
-            subtitle: 'Auto shows the bar when any weekly limit is at or above 50%.',
+            subtitle: 'Overall weekly usage. Auto shows it at or above 50%.',
         });
         const stringList = new Gtk.StringList();
         for (const label of WEEK_VIS_LABELS) stringList.append(label);
@@ -120,6 +120,23 @@ export default class ClaudeUsagePrefs extends ExtensionPreferences {
             if (v) settings.set_string('week-bar-visibility', v);
         });
         displayGroup.add(weekRow);
+
+        const modelRow = new Adw.ComboRow({
+            title: 'Per-model bars',
+            subtitle: 'A bar for each separate weekly cap, such as Fable. ' +
+                'Auto shows it at or above 50%.',
+        });
+        const modelList = new Gtk.StringList();
+        for (const label of WEEK_VIS_LABELS) modelList.append(label);
+        modelRow.model = modelList;
+        const modelIdx = WEEK_VIS_VALUES.indexOf(
+            settings.get_string('model-bar-visibility'));
+        modelRow.selected = modelIdx >= 0 ? modelIdx : 0;
+        modelRow.connect('notify::selected', () => {
+            const v = WEEK_VIS_VALUES[modelRow.selected];
+            if (v) settings.set_string('model-bar-visibility', v);
+        });
+        displayGroup.add(modelRow);
 
         saveBtn.connect('clicked', async () => {
             saveBtn.sensitive = false;

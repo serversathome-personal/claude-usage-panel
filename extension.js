@@ -75,19 +75,6 @@ function fmtWindowLine(label, w) {
     return `${label}: ${fmtPct(w?.pct)}${reset ? ` · resets ${reset}` : ''}`;
 }
 
-// The weekly window closest to its cap: the overall 7-day window or any
-// per-model / per-product weekly limit, since whichever is highest blocks
-// first. Returns { pct, resets_at, name } with name null for the overall one.
-function bindingWeekly(data) {
-    let best = { ...(data?.seven_day || {}), name: null };
-    for (const l of data?.limits || []) {
-        if (l.window !== '7d' || l.pct == null) continue;
-        if (best.pct == null || l.pct > best.pct)
-            best = { pct: l.pct, resets_at: l.resets_at, name: l.name };
-    }
-    return best;
-}
-
 function fmtCountdown(iso) {
     if (!iso) return '';
     const t = Date.parse(iso);
@@ -103,6 +90,53 @@ function fmtCountdown(iso) {
     return `${m}m`;
 }
 
+function makeBarLine(slotWidth) {
+    const line = new St.BoxLayout({
+        style_class: 'cu-line',
+        orientation: Clutter.Orientation.HORIZONTAL,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const trackRow = new St.BoxLayout({
+        style_class: 'cu-track-row',
+        orientation: Clutter.Orientation.HORIZONTAL,
+        width: slotWidth,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const fill = new St.Widget({ style_class: 'cu-fill' });
+    fill.width = 0;
+    fill.height = BAR_HEIGHT_PX;
+    trackRow.add_child(fill);
+    const pct = new St.Label({
+        text: '—',
+        style_class: 'cu-label',
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const reset = new St.Label({
+        text: '',
+        style_class: 'cu-label-secondary',
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    line.add_child(trackRow);
+    line.add_child(pct);
+    line.add_child(reset);
+    return { line, fill, pct, reset };
+}
+
+function setBar(fill, pct, slotWidth) {
+    const clamped = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+    fill.width = Math.round((clamped / 100) * slotWidth);
+    fill.set_style(`background-color: ${colorForPct(pct)};`);
+}
+
+// pct ≥ this shows a bar in 'auto' visibility mode.
+const AUTO_SHOW_PCT = 50;
+
+function visibleFor(mode, pct) {
+    if (mode === 'show') return true;
+    if (mode === 'hide') return false;
+    return (pct ?? 0) >= AUTO_SHOW_PCT;
+}
+
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
     _init(extension) {
@@ -110,47 +144,20 @@ class Indicator extends PanelMenu.Button {
         this._extension = extension;
         this._settings = extension.getSettings();
         this._lastWeekPct = null;
-        this._settingsChangedId = this._settings.connect(
-            'changed::week-bar-visibility',
-            () => this._applyWeekVisibility());
+        // Per-model weekly caps (e.g. Fable) get their own bar, keyed by name.
+        this._modelBars = new Map();
+        this._settingsChangedIds = [
+            this._settings.connect('changed::week-bar-visibility',
+                () => this._applyWeekVisibility()),
+            this._settings.connect('changed::model-bar-visibility',
+                () => this._applyModelBarVisibility()),
+        ];
 
         const box = new St.BoxLayout({
             style_class: 'cu-box',
             orientation: Clutter.Orientation.HORIZONTAL,
             y_align: Clutter.ActorAlign.CENTER,
         });
-
-        const makeBarLine = (slotWidth) => {
-            const line = new St.BoxLayout({
-                style_class: 'cu-line',
-                orientation: Clutter.Orientation.HORIZONTAL,
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            const trackRow = new St.BoxLayout({
-                style_class: 'cu-track-row',
-                orientation: Clutter.Orientation.HORIZONTAL,
-                width: slotWidth,
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            const fill = new St.Widget({ style_class: 'cu-fill' });
-            fill.width = 0;
-            fill.height = BAR_HEIGHT_PX;
-            trackRow.add_child(fill);
-            const pct = new St.Label({
-                text: '—',
-                style_class: 'cu-label',
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            const reset = new St.Label({
-                text: '',
-                style_class: 'cu-label-secondary',
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            line.add_child(trackRow);
-            line.add_child(pct);
-            line.add_child(reset);
-            return { line, fill, pct, reset };
-        };
 
         const hour = makeBarLine(HOUR_SLOT_PX);
         const week = makeBarLine(WEEK_SLOT_PX);
@@ -230,6 +237,7 @@ class Indicator extends PanelMenu.Button {
             this._fillWeek.width = 0;
             this._lastWeekPct = null;
             this._applyWeekVisibility();
+            this._updateModelBars([]);
             this._statusItem.label.text = data?.error
                 ? `Error: ${data.error}`
                 : 'No data — open Settings to add cookies';
@@ -252,23 +260,15 @@ class Indicator extends PanelMenu.Button {
         this._hourPctLabel.text = fmtPct(h.pct) + (data.error ? ' !' : '');
         const hourReset = fmtCountdown(h.resets_at);
         this._hourResetLabel.text = hourReset ? `· ${hourReset}` : '';
-        // The panel's week bar tracks whichever weekly limit is tightest;
-        // the menu still lists each one.
-        const wk = bindingWeekly(data);
-        this._weekPctLabel.text = wk.name
-            ? `${wk.name} ${fmtPct(wk.pct)}` : fmtPct(wk.pct);
-        const weekReset = fmtCountdown(wk.resets_at);
+        this._weekPctLabel.text = fmtPct(w.pct);
+        const weekReset = fmtCountdown(w.resets_at);
         this._weekResetLabel.text = weekReset ? `· ${weekReset}` : '';
 
-        const setBar = (fill, pctVal, slotWidth) => {
-            const clamped = pctVal == null ? 0 : Math.max(0, Math.min(100, pctVal));
-            fill.width = Math.round((clamped / 100) * slotWidth);
-            fill.set_style(`background-color: ${colorForPct(pctVal)};`);
-        };
         setBar(this._fillHour, h.pct, HOUR_SLOT_PX);
-        setBar(this._fillWeek, wk.pct, WEEK_SLOT_PX);
-        this._lastWeekPct = wk.pct ?? null;
+        setBar(this._fillWeek, w.pct, WEEK_SLOT_PX);
+        this._lastWeekPct = w.pct ?? null;
         this._applyWeekVisibility();
+        this._updateModelBars(data.limits || []);
 
         this._fiveHourItem.label.text = fmtWindowLine('5-hour', h);
         this._sevenDayItem.label.text = fmtWindowLine('7-day', w);
@@ -333,19 +333,47 @@ class Indicator extends PanelMenu.Button {
     }
 
     _applyWeekVisibility() {
-        const mode = this._settings.get_string('week-bar-visibility');
-        let visible;
-        if (mode === 'show') visible = true;
-        else if (mode === 'hide') visible = false;
-        else visible = (this._lastWeekPct ?? 0) >= 50;
-        this._weekLine.visible = visible;
+        this._weekLine.visible = visibleFor(
+            this._settings.get_string('week-bar-visibility'), this._lastWeekPct);
+    }
+
+    // One bar per per-model weekly cap, e.g. "Fable 9% · 6d 4h". Bars for
+    // caps that disappear from the response are removed.
+    _updateModelBars(limits) {
+        const caps = limits.filter(l => l.kind === 'model' && l.window === '7d');
+        const names = new Set(caps.map(l => l.name));
+        for (const [name, bar] of this._modelBars) {
+            if (!names.has(name)) {
+                bar.line.destroy();
+                this._modelBars.delete(name);
+            }
+        }
+        for (const l of caps) {
+            let bar = this._modelBars.get(l.name);
+            if (!bar) {
+                bar = makeBarLine(WEEK_SLOT_PX);
+                this._box.add_child(bar.line);
+                this._modelBars.set(l.name, bar);
+            }
+            bar.lastPct = l.pct ?? null;
+            bar.pct.text = `${l.name} ${fmtPct(l.pct)}`;
+            const reset = fmtCountdown(l.resets_at);
+            bar.reset.text = reset ? `· ${reset}` : '';
+            setBar(bar.fill, l.pct, WEEK_SLOT_PX);
+        }
+        this._applyModelBarVisibility();
+    }
+
+    _applyModelBarVisibility() {
+        const mode = this._settings.get_string('model-bar-visibility');
+        for (const bar of this._modelBars.values())
+            bar.line.visible = visibleFor(mode, bar.lastPct);
     }
 
     destroy() {
-        if (this._settingsChangedId) {
-            this._settings.disconnect(this._settingsChangedId);
-            this._settingsChangedId = null;
-        }
+        for (const id of this._settingsChangedIds ?? [])
+            this._settings.disconnect(id);
+        this._settingsChangedIds = null;
         super.destroy();
     }
 });

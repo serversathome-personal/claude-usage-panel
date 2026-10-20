@@ -112,10 +112,13 @@ needed, the panel retries on the next poll.
 
 - **Bar (left, wider):** percentage of the rolling 5-hour quota used.
   Color smoothly grades from green to yellow to red as it fills.
-- **Bar (right):** the tightest weekly limit, either the overall 7-day
-  quota or a per-model cap (labelled with the model name when it is the
-  per-model one). Only visible once it crosses 50%, since most of the time
-  it's near zero.
+- **7-day bar:** overall weekly usage.
+- **Per-model bars:** one per separate weekly cap, labelled with the model
+  (e.g. `Fable 9% · 6d 4h`).
+
+  Each kind of bar has its own **Auto / Always show / Never show** setting
+  in **Settings…**. Auto shows a bar only once it crosses 50%, since most of
+  the time it's near zero.
 - **Number:** the 5-hour percentage.
 - **Countdown:** time until the 5-hour window resets.
 

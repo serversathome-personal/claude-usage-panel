@@ -98,6 +98,13 @@ organization.
 
 ### When the panel shows `!`
 
+The menu's status line shows the actual error. Failed polls are also
+logged; to see them, run:
+
+```sh
+journalctl -b -o cat /usr/bin/gnome-shell | grep claude-usage
+```
+
 The most common cause is that `cf_clearance` has rotated. Re-paste it via
 **Settings…** and the panel will refresh. If you still get HTTP 403 with a
 freshly copied `cf_clearance`, Cloudflare probably rejected the user agent:

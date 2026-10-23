@@ -17,6 +17,8 @@ const BAR_HEIGHT_PX = 8;
 const POLL_SECONDS = 60;
 // After a 429, skip 1, 2, 4… polls, capped at this many.
 const MAX_BACKOFF_POLLS = 16;
+// Treat a fetch still pending after this long as stuck.
+const FETCH_STUCK_MS = 120 * 1000;
 
 function fmtPct(pct) {
     if (pct == null) return '—';
@@ -80,7 +82,9 @@ function fmtCountdown(iso) {
     const t = Date.parse(iso);
     if (Number.isNaN(t)) return '';
     const ms = t - Date.now();
-    if (ms <= 0) return 'now';
+    // A reset time already in the past only shows up on stale data; a
+    // countdown of "now" there reads as if the data were current.
+    if (ms <= 0) return '';
     const mins = Math.floor(ms / 60000);
     const days = Math.floor(mins / 1440);
     const hours = Math.floor((mins % 1440) / 60);
@@ -435,8 +439,13 @@ export default class ClaudeUsageExtension extends Extension {
     }
 
     fetch() {
-        if (this._fetching || !this._cancellable) return;
+        if (!this._cancellable) return;
+        // A request that never settles would otherwise block every later
+        // poll; Soup's 15s timeout should prevent that, but don't rely on it.
+        const now = Date.now();
+        if (this._fetching && now - this._fetchStarted < FETCH_STUCK_MS) return;
         this._fetching = true;
+        this._fetchStarted = now;
         fetchUsage({
             userAgent: this._settings.get_string('user-agent').trim(),
             cancellable: this._cancellable,

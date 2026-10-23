@@ -60,10 +60,20 @@ export function storeSecret(account, value) {
     });
 }
 
+// The shell keeps this session (and its pooled HTTP connection) alive for
+// hours. A connection that goes bad after suspend, a network change or a
+// Cloudflare rotation then fails every poll, while a fresh process such as
+// the prefs window succeeds with the same cookies. So any failure drops the
+// session and the request is retried once on a new one.
 let _session = null;
 function session() {
     if (!_session) _session = new Soup.Session({ timeout: 15 });
     return _session;
+}
+
+function resetSession() {
+    _session?.abort();
+    _session = null;
 }
 
 function httpJson(url, cookieHeader, userAgent, cancellable) {
@@ -187,7 +197,7 @@ export async function fetchUsage(opts = {}) {
 
     const orgKey = `${sessionKey}\n${lastActiveOrg}`;
     let raw, org_id;
-    try {
+    const attempt = async () => {
         if (_org.key === orgKey && _org.id) {
             org_id = _org.id;
         } else {
@@ -202,8 +212,22 @@ export async function fetchUsage(opts = {}) {
         raw = await httpJson(
             `https://claude.ai/api/organizations/${org_id}/usage`,
             cookieHeader, userAgent, cancellable);
+    };
+    try {
+        try {
+            await attempt();
+        } catch (e) {
+            // 401 means the sessionKey really is bad; retrying won't help.
+            if (isCancelled(e) || e.code === 401 || e.code === 429) throw e;
+            console.warn(`claude-usage: ${e.message || e}; retrying on a fresh connection`);
+            resetSession();
+            _org = { key: null, id: null };
+            await attempt();
+        }
     } catch (e) {
         if (isCancelled(e)) return null;
+        console.warn(`claude-usage: fetch failed: ${e.message || e}`);
+        resetSession();
         _org = { key: null, id: null };
         let msg = e.message || String(e);
         if (e.code === 403)
